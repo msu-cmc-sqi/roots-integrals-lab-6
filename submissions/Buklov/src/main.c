@@ -17,8 +17,20 @@ extern int g_iterations;
 static const double EPS = 1e-5;
 
 static void usage(void) {
-    puts("usage: ./prog [--help|--roots|--iterations|--test-root|--test-integral]");
-    puts("  без флагов -- посчитать площадь фигуры");
+    puts("Лаб 6, вариант 9. Буклов М.А.");
+    puts("Площадь криволинейного треугольника f1 ∩ f2 ∩ f3.");
+    puts("");
+    puts("Использование:");
+    puts("  ./prog                  -- вычислить площадь фигуры");
+    puts("  ./prog --roots          -- показать x-координаты вершин треугольника");
+    puts("  ./prog --iterations     -- число итераций метода поиска корня");
+    puts("  ./prog --test-root      -- тест: sqrt(2) методом деления пополам");
+    puts("  ./prog --test-integral  -- тест: ∫₀¹ x dx = 0.5");
+    puts("  ./prog --help           -- эта справка");
+    puts("");
+    puts("Сборка:");
+    puts("  make                    -- метод деления пополам (по умолчанию)");
+    puts("  make METHOD=CHORDS      -- метод хорд");
 }
 
 /* служебная f(x) = x, для теста интеграла */
