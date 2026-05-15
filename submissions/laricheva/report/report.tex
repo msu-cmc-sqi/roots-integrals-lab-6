@@ -1,0 +1,478 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\usepackage[a4paper,left=30mm,right=30mm,top=30mm,bottom=30mm]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{float}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{tocloft}
+
+\pgfplotsset{compat=1.18}
+\setstretch{1.15}
+\setlength{\parindent}{1.25cm}
+\setcounter{secnumdepth}{0}
+
+\renewcommand{\contentsname}{Содержание}
+\renewcommand{\cfttoctitlefont}{\hfill\Large\bfseries}
+\renewcommand{\cftaftertoctitle}{\hfill\null\par\vspace{1cm}}
+\renewcommand{\cftsecleader}{\cftdotfill{\cftdotsep}}
+\renewcommand{\cftsubsecleader}{\cftdotfill{\cftdotsep}}
+\setlength{\cftbeforesecskip}{0.6em}
+\setlength{\cftbeforesubsecskip}{0.2em}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single
+}
+
+\begin{document}
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{center}
+{\small
+МОСКОВСКИЙ ГОСУДАРСТВЕННЫЙ УНИВЕРСИТЕТ\\
+имени М.~В.~ЛОМОНОСОВА\\
+ФАКУЛЬТЕТ ВЫЧИСЛИТЕЛЬНОЙ МАТЕМАТИКИ И КИБЕРНЕТИКИ
+}
+
+\vspace{5cm}
+
+{\Large ОТЧЕТ ПО ЗАДАНИЮ №6}
+
+\vspace{1.2cm}
+
+\begin{minipage}{0.9\textwidth}
+\centering
+{\large\bfseries
+<<Сборка многомодульных программ.\\
+Вычисление корней уравнений и определенных интегралов>>
+}
+\end{minipage}
+
+\vspace{1.2cm}
+
+{\large\bfseries Вариант 9}
+\end{center}
+
+\vfill
+
+\begin{flushright}
+Исполнитель: студентка 104 группы\\
+Ларичева Д.~А.\\[0.7cm]
+Преподаватель:\\
+Гуляев Д.~А.
+\end{flushright}
+
+\vfill
+
+\begin{center}
+Москва, 2026
+\end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Постановка задачи}
+Целью работы является разработка многомодульной программы на языках C и NASM32 для вычисления площади плоской фигуры, ограниченной тремя кривыми.
+
+В варианте 9 заданы функции:
+\[
+f_1(x)=\frac{3}{(x-1)^2+1},
+\]
+\[
+f_2(x)=\sqrt{x+0.5},
+\]
+\[
+f_3(x)=e^{-x}.
+\]
+
+По индивидуальному варианту необходимо использовать:
+\begin{itemize}
+    \item точности вычислений: $\varepsilon=10^{-3},10^{-5},10^{-7}$;
+    \item тип вычислений: \texttt{float};
+    \item методы поиска корней: метод деления пополам и метод Ньютона;
+    \item метод вычисления интегралов: метод прямоугольников.
+\end{itemize}
+
+Требуется найти точки пересечения кривых, представить площадь фигуры как сумму определенных интегралов и вычислить ее с заданной точностью.
+
+Функции $f_1$, $f_2$, $f_3$ и их производные реализуются на языке NASM32. Остальная часть программы реализуется на языке C. Сборка программы выполняется с помощью \texttt{Makefile}.
+
+\newpage
+\section{Математическое обоснование}
+Точки пересечения двух кривых находятся как корни уравнения:
+\[
+f_i(x)=f_j(x).
+\]
+
+Для применения численных методов это уравнение приводится к виду:
+\[
+F(x)=f_i(x)-f_j(x)=0.
+\]
+
+В работе используются три уравнения:
+\[
+f_1(x)-f_3(x)=0,
+\]
+\[
+f_2(x)-f_3(x)=0,
+\]
+\[
+f_1(x)-f_2(x)=0.
+\]
+
+Для поиска корней были выбраны следующие отрезки:
+\begin{itemize}
+    \item $f_1=f_3$: $[-0.5;0]$;
+    \item $f_2=f_3$: $[0;0.5]$;
+    \item $f_1=f_2$: $[1.5;2.5]$.
+\end{itemize}
+
+Выбор отрезков был сделан по графикам функций и проверке смены знака функции $F(x)$ на концах отрезка.
+
+Метод деления пополам основан на следующем свойстве: если функция непрерывна на отрезке $[a,b]$ и выполняется условие
+\[
+F(a)F(b)<0,
+\]
+то на этом отрезке существует корень. На каждом шаге вычисляется середина отрезка:
+\[
+c=\frac{a+b}{2}.
+\]
+
+Затем выбирается та половина отрезка, на которой функция меняет знак.
+
+Метод Ньютона задается формулой:
+\[
+x_{n+1}=x_n-\frac{F(x_n)}{F'(x_n)}.
+\]
+
+Для этого нужны производные функций:
+\[
+f_1'(x)=\frac{-6(x-1)}{((x-1)^2+1)^2},
+\]
+\[
+f_2'(x)=\frac{1}{2\sqrt{x+0.5}},
+\]
+\[
+f_3'(x)=-e^{-x}.
+\]
+
+Метод Ньютона при хорошем начальном приближении сходится быстрее метода деления пополам \cite{math1}.
+
+Для вычисления интегралов используется метод прямоугольников:
+\[
+\int_a^b f(x)\,dx \approx h\sum_{k=0}^{n-1} f(x_k),
+\]
+где
+\[
+h=\frac{b-a}{n}.
+\]
+
+Количество разбиений увеличивается до тех пор, пока разность между двумя последовательными приближениями не станет меньше заданной точности.
+
+\subsection{Графики функций}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    axis lines=middle,
+    xlabel={$x$},
+    ylabel={$y$},
+    xmin=-1,
+    xmax=3,
+    ymin=0,
+    ymax=3.5,
+    grid=major,
+    width=12cm,
+    height=8cm,
+    legend cell align=left,
+    legend pos=north east
+]
+\addplot[blue,thick,domain=-1:3,samples=300] {3/((x-1)^2+1)};
+\addlegendentry{$f_1(x)=\frac{3}{(x-1)^2+1}$}
+\addplot[red,thick,domain=-0.5:3,samples=300] {sqrt(x+0.5)};
+\addlegendentry{$f_2(x)=\sqrt{x+0.5}$}
+\addplot[green!60!black,thick,domain=-1:3,samples=300] {exp(-x)};
+\addlegendentry{$f_3(x)=e^{-x}$}
+\end{axis}
+\end{tikzpicture}
+\caption{Графики функций варианта 9}
+\end{figure}
+
+\newpage
+\section{Результаты экспериментов}
+В результате работы программы были получены точки пересечения, представленные в таблице.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Кривые & $x$ & $y$ \\
+\hline
+$f_1=f_3$ & -0.2033349 & 1.2254827 \\
+\hline
+$f_2=f_3$ & 0.1874113 & 0.8291027 \\
+\hline
+$f_1=f_2$ & 1.9561526 & 1.5672110 \\
+\hline
+\end{tabular}
+\caption{Координаты точек пересечения}
+\end{table}
+
+Площадь фигуры была вычислена как сумма интегралов на промежутках между найденными точками пересечения.
+
+На промежутке от $x_{13}$ до $x_{23}$ область ограничена функциями $f_1$ и $f_3$.
+
+На промежутке от $x_{23}$ до $x_{12}$ область ограничена функциями $f_1$ и $f_2$.
+
+Итоговое значение площади:
+\[
+S \approx 2.3386023.
+\]
+
+\subsection{Количество итераций}
+Для метода деления пополам были получены следующие значения:
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+Уравнение & Количество итераций \\
+\hline
+$f_1=f_3$ & 15 \\
+\hline
+$f_2=f_3$ & 15 \\
+\hline
+$f_1=f_2$ & 16 \\
+\hline
+\end{tabular}
+\caption{Количество итераций метода деления пополам}
+\end{table}
+
+Для метода Ньютона были получены следующие значения:
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+Уравнение & Количество итераций \\
+\hline
+$f_1=f_3$ & 3 \\
+\hline
+$f_2=f_3$ & 3 \\
+\hline
+$f_1=f_2$ & 3 \\
+\hline
+\end{tabular}
+\caption{Количество итераций метода Ньютона}
+\end{table}
+
+Из таблиц видно, что метод Ньютона для выбранных отрезков сошелся быстрее метода деления пополам.
+
+\subsection{Результаты тестирования}
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Тест & Получено & Ожидалось \\
+\hline
+Бисекция $f_1=f_3$ & -0.2033310 & -0.2033349 \\
+\hline
+Ньютон $f_1=f_3$ & -0.2033349 & -0.2033349 \\
+\hline
+Бисекция $f_2=f_3$ & 0.1874161 & 0.1874113 \\
+\hline
+Ньютон $f_2=f_3$ & 0.1874113 & 0.1874113 \\
+\hline
+Бисекция $f_1=f_2$ & 1.9561539 & 1.9561525 \\
+\hline
+\end{tabular}
+\caption{Тестирование поиска корней}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Интеграл & Получено & Ожидалось \\
+\hline
+$\int_0^1 f_1(x)\,dx$ & 2.3561982 & 2.3561945 \\
+\hline
+$\int_0^2 f_2(x)\,dx$ & 2.3995331 & 2.3995291 \\
+\hline
+$\int_0^1 f_3(x)\,dx$ & 0.6321140 & 0.6321206 \\
+\hline
+\end{tabular}
+\caption{Тестирование вычисления интегралов}
+\end{table}
+
+\newpage
+\section{Структура программы и спецификация функций}
+Программа состоит из следующих файлов:
+\begin{verbatim}
+lab6/
+├── asm/
+│   └── functions.asm
+├── include/
+│   ├── functions.h
+│   └── numerical.h
+├── src/
+│   ├── main.c
+│   └── numerical.c
+└── Makefile
+\end{verbatim}
+
+\subsection{main.c}
+Файл \texttt{main.c} является главным модулем программы. В нем выполняется обработка аргументов командной строки, вызов численных методов и вывод результатов.
+
+Поддерживаются следующие режимы:
+\begin{itemize}
+    \item вывод площади фигуры;
+    \item вывод точек пересечения;
+    \item вывод количества итераций;
+    \item тестирование поиска корней;
+    \item тестирование интегралов.
+\end{itemize}
+
+\subsection{numerical.c}
+Файл \texttt{numerical.c} содержит реализацию численных методов:
+\begin{itemize}
+    \item \texttt{root\_bisection} --- метод деления пополам;
+    \item \texttt{root\_newton} --- метод Ньютона;
+    \item \texttt{integral\_rect} --- метод прямоугольников.
+\end{itemize}
+
+\subsection{functions.asm}
+Файл \texttt{functions.asm} содержит реализацию функций и их производных на языке NASM32:
+\begin{itemize}
+    \item \texttt{f1};
+    \item \texttt{f2};
+    \item \texttt{f3};
+    \item \texttt{df1};
+    \item \texttt{df2};
+    \item \texttt{df3}.
+\end{itemize}
+
+Функции вызываются из C-кода по соглашению cdecl.
+
+\newpage
+\section{Сборка программы (Make-файл)}
+Сборка программы выполняется с помощью \texttt{Makefile}. Используются компилятор \texttt{gcc}, ассемблер \texttt{nasm} и ключ \texttt{-m32} для сборки 32-битной программы.
+
+Основные команды:
+\begin{lstlisting}
+make
+make METHOD=NEWTON
+make EPS=1e-3
+make EPS=1e-5
+make EPS=1e-7
+make clean
+\end{lstlisting}
+
+Команда \texttt{make} собирает программу с методом деления пополам.
+
+Команда \texttt{make METHOD=NEWTON} собирает программу с методом Ньютона.
+
+Команда \texttt{make EPS=...} позволяет задать точность на этапе сборки.
+
+Команда \texttt{make clean} удаляет объектные файлы и исполняемый файл.
+
+Пример команд компиляции:
+\begin{lstlisting}
+gcc -m32 -Wall -Wextra -O2 -Iinclude
+nasm -f elf32
+gcc -m32 -o prog ...
+\end{lstlisting}
+
+\newpage
+\section{Отладка программы, тестирование функций}
+Для проверки корректности были реализованы специальные режимы запуска.
+
+Тестирование поиска корней:
+\begin{lstlisting}
+./prog --test-root
+\end{lstlisting}
+
+Пример вывода:
+\begin{lstlisting}
+bisection f1=f3: x=-0.2033310, expected about -0.2033349
+newton f1=f3: x=-0.2033349, expected about -0.2033349
+bisection f2=f3: x=0.1874161, expected about 0.1874113
+newton f2=f3: x=0.1874113, expected about 0.1874113
+bisection f1=f2: x=1.9561539, expected about 1.9561525
+\end{lstlisting}
+
+Тестирование интегралов:
+\begin{lstlisting}
+./prog --test-integral
+\end{lstlisting}
+
+Пример вывода:
+\begin{lstlisting}
+integral f1[0,1] = 2.3561982, expected about 2.3561945
+integral f2[0,2] = 2.3995331, expected about 2.3995291
+integral f3[0,1] = 0.6321140, expected about 0.6321206
+\end{lstlisting}
+
+Также были проверены параметры:
+\begin{itemize}
+    \item \texttt{--help};
+    \item \texttt{--roots};
+    \item \texttt{--iterations};
+    \item \texttt{--test-root};
+    \item \texttt{--test-integral}.
+\end{itemize}
+
+\newpage
+\section{Программа на Си и на Ассемблере}
+Программа реализована на языках C и NASM32.
+
+На языке ассемблера реализованы функции варианта и их производные. На языке C реализованы численные методы и основная логика программы.
+
+Исходные тексты программы находятся в архиве, приложенном к отчету.
+
+В архив входят:
+\begin{itemize}
+    \item \texttt{main.c};
+    \item \texttt{numerical.c};
+    \item \texttt{functions.asm};
+    \item \texttt{functions.h};
+    \item \texttt{numerical.h};
+    \item \texttt{Makefile}.
+\end{itemize}
+
+\newpage
+\section{Анализ допущенных ошибок}
+Во время выполнения работы возникали следующие ошибки:
+\begin{itemize}
+    \item сначала был выбран неправильный набор функций;
+    \item были неправильно подобраны интервалы поиска корней;
+    \item возникали ошибки при работе с FPU;
+    \item возникали ошибки при подключении NASM-модуля к C-программе;
+    \item метод Ньютона требовал аккуратного выбора начального приближения.
+\end{itemize}
+
+После исправления функций, интервалов и ассемблерной части программа начала корректно вычислять точки пересечения и площадь фигуры.
+
+\newpage
+\section{Литература}
+\begin{thebibliography}{99}
+\bibitem{math1}
+Ильин В.~А., Садовничий В.~А., Сендов Бл.~Х.
+Математический анализ. Т.~1.
+--- М.: Наука, 1985.
+
+\bibitem{method}
+Трифонов Н.~П., Пильщиков В.~Н.
+Задания практикума на ЭВМ.
+\end{thebibliography}
+
+\end{document}
