@@ -1,0 +1,509 @@
+\documentclass[a4paper,12pt,titlepage,finall]{article}
+
+\usepackage[T1,T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{geometry}
+\usepackage{indentfirst}
+\usepackage{listings}
+\usepackage{amsmath}
+
+\geometry{a4paper,left=30mm,top=30mm,bottom=30mm,right=30mm}
+\setcounter{secnumdepth}{0}
+\usepgfplotslibrary{fillbetween}
+\pgfplotsset{compat=1.18}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    inputencoding=utf8,
+    extendedchars=true,
+    keepspaces=true
+}
+
+\begin{document}
+
+% Титульный лист
+\begin{titlepage}
+    \begin{center}
+        {\small \sc Московский государственный университет \\
+        имени М.~В.~Ломоносова \\
+        Факультет вычислительной математики и кибернетики\\}
+        \vfill
+        {\Large \sc Отчет по заданию №6}\\
+        ~\\
+        {\large \bf <<Сборка многомодульных программ. \\
+        Вычисление корней уравнений и определенных интегралов.>>}\\
+        ~\\
+        {\large \bf Вариант 3 / Ньютон+Хорды / Симпсон}
+    \end{center}
+    \begin{flushright}
+        \vfill {Выполнил:\\
+        студент 104 группы\\
+        Коцин~А.~О.\\
+        ~\\
+        Преподаватель:\\
+        % вставьте имя преподавателя
+        }
+    \end{flushright}
+    \begin{center}
+        \vfill
+        {\small Москва\\2026}
+    \end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ------------------------------------------------------------------
+\section{Постановка задачи}
+
+Требуется реализовать программу, вычисляющую с заданной точностью $\varepsilon$
+площадь плоской фигуры, ограниченной тремя кривыми:
+\[
+    f_1(x) = e^{-x} + 3, \quad f_2(x) = 2x - 2, \quad f_3(x) = \frac{1}{x}.
+\]
+
+Площадь представляется как алгебраическая сумма определенных интегралов.
+Пределы интегрирования --- абсциссы точек пересечения кривых, которые
+находятся численно с точностью $\varepsilon_1$ двумя методами (выбор ---
+через директиву препроцессора):
+\begin{itemize}
+    \item методом Ньютона (касательных),
+    \item методом хорд (регула фальси).
+\end{itemize}
+
+Интегралы вычисляются с точностью $\varepsilon_2$ по формуле Симпсона
+с правилом Рунге для контроля шага.
+
+Функции $f_1$, $f_2$, $f_3$ и их производные реализованы на языке
+ассемблера NASM (x86-32, соглашение \texttt{cdecl}).
+Остальной код написан на языке Си. Сборка выполняется утилитой \texttt{make}.
+
+Отрезки для поиска корней определяются аналитически: требуется, чтобы
+$F(a) \cdot F(b) < 0$.
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Математическое обоснование}
+
+\subsection{Точки пересечения кривых}
+
+\textbf{$f_2 \cap f_3$} --- единственный случай с точным решением:
+\[
+    2x - 2 = \frac{1}{x} \implies 2x^2 - 2x - 1 = 0
+    \implies x_B = \frac{1 + \sqrt{3}}{2} \approx 1{,}3660.
+\]
+
+\textbf{$f_1 \cap f_3$} --- трансцендентное уравнение $e^{-x} + 3 - 1/x = 0$.
+Анализ знаков:
+\[
+    F(0{,}20) = e^{-0{,}2} + 3 - 5{,}00 \approx -0{,}18 < 0, \quad
+    F(0{,}35) = e^{-0{,}35} + 3 - 2{,}86 \approx +0{,}85 > 0.
+\]
+Корень $x_A \in [0{,}20;\; 0{,}35]$.
+
+\textbf{$f_1 \cap f_2$} --- уравнение $e^{-x} + 5 - 2x = 0$.
+Анализ знаков:
+\[
+    F(2{,}40) \approx +0{,}29 > 0, \quad F(2{,}70) \approx -0{,}33 < 0.
+\]
+Корень $x_C \in [2{,}40;\; 2{,}70]$.
+
+\subsection{Условия сходимости методов}
+
+Для методов Ньютона и хорд достаточно, чтобы $F'(x)$ не обращалась в нуль на отрезке~\cite{math}:
+
+\begin{center}
+\begin{tabular}{|l|l|c|}
+\hline
+Уравнение & $F'(x)$ & Знак на отрезке \\
+\hline
+$f_1 - f_3 = 0$ & $-e^{-x} + 1/x^2$ & $> 0$ на $[0{,}20;\;0{,}35]$ \\
+$f_2 - f_3 = 0$ & $2 + 1/x^2$       & $> 0$ всегда \\
+$f_1 - f_2 = 0$ & $-e^{-x} - 2$     & $< 0$ всегда \\
+\hline
+\end{tabular}
+\end{center}
+
+На каждом из трех отрезков $F$ строго монотонна, что гарантирует сходимость обоих методов.
+
+\subsection{Выбор $\varepsilon_1$ и $\varepsilon_2$}
+
+В точках пересечения подынтегральная функция $F(x) = f_i(x) - f_j(x)$
+обращается в нуль. Поэтому погрешность $\delta x$ в определении границы интегрирования
+вносит ошибку площади порядка $O(\delta x^2)$, что значительно меньше $\delta x$.
+Таким образом, достаточно взять $\varepsilon_1 = \varepsilon_2 = \varepsilon$.
+
+\subsection{Формула площади}
+
+На интервале $[x_A, x_B]$: $f_1 > f_3 > f_2$, поэтому верхняя граница --- $f_1$, нижняя --- $f_3$.
+На интервале $[x_B, x_C]$: $f_1 > f_2 > f_3$, поэтому верхняя --- $f_1$, нижняя --- $f_2$.
+\[
+    S = \int_{x_A}^{x_B} \bigl(f_1(x) - f_3(x)\bigr)\,dx
+      + \int_{x_B}^{x_C} \bigl(f_1(x) - f_2(x)\bigr)\,dx.
+\]
+
+\subsection{Графики кривых}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    axis lines=middle,
+    restrict x to domain=0.08:3.1,
+    restrict y to domain=-0.5:5.5,
+    enlargelimits,
+    legend cell align=left,
+    legend pos=north east,
+    width=13cm, height=9cm,
+    xlabel={$x$}, ylabel={$y$}]
+
+\addplot[green!70!black, domain=0.08:3.1, samples=300, thick, name path=F1]
+    {exp(-x)+3};
+\addlegendentry{$f_1(x)=e^{-x}+3$}
+
+\addplot[blue, domain=0.08:3.1, samples=300, thick, name path=F2]
+    {2*x-2};
+\addlegendentry{$f_2(x)=2x-2$}
+
+\addplot[red, domain=0.08:3.1, samples=300, thick, name path=F3]
+    {1/x};
+\addlegendentry{$f_3(x)=1/x$}
+
+\addplot[blue!15, samples=300]
+    fill between[of=F1 and F3, soft clip={domain=0.2655:1.3660}];
+\addplot[blue!15, samples=300]
+    fill between[of=F1 and F2, soft clip={domain=1.3660:2.5395}];
+\addlegendentry{$S \approx 3{,}636$}
+
+\end{axis}
+\end{tikzpicture}
+\caption{Плоская фигура, ограниченная кривыми $f_1$, $f_2$, $f_3$}
+\label{plot1}
+\end{figure}
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Результаты экспериментов}
+
+Вычисленные координаты точек пересечения приведены в таблице~\ref{table1}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Кривые & $x$ & $y$ \\
+\hline
+$f_1$ и $f_3$ & $0{,}2654743609$ & $3{,}7669$ \\
+$f_2$ и $f_3$ & $1{,}3660254038$ & $0{,}7321$ \\
+$f_1$ и $f_2$ & $2{,}5394547084$ & $3{,}0790$ \\
+\hline
+\end{tabular}
+\caption{Координаты точек пересечения (метод Ньютона, $\varepsilon = 10^{-6}$)}
+\label{table1}
+\end{table}
+
+Площадь фигуры при разных значениях точности (таблица~\ref{table2}):
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+$\varepsilon$ & Площадь & Итерации ($f_1{\cap}f_3$, $f_2{\cap}f_3$, $f_1{\cap}f_2$) & Метод \\
+\hline
+$10^{-4}$ & $3{,}6356614196$ & 3, 3, 2 & Ньютона \\
+$10^{-6}$ & $3{,}6357850283$ & 3, 3, 3 & Ньютона \\
+$10^{-8}$ & $3{,}6357851558$ & 4, 3, 3 & Ньютона \\
+\hline
+\end{tabular}
+\caption{Результаты при различных значениях $\varepsilon$}
+\label{table2}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    axis lines=middle,
+    restrict x to domain=0.08:3.1,
+    restrict y to domain=-0.5:5.5,
+    enlargelimits,
+    legend cell align=left,
+    legend pos=north east,
+    width=13cm, height=9cm,
+    xticklabels={,,}, yticklabels={,,}]
+
+\addplot[green!70!black, domain=0.08:3.1, samples=300, thick, name path=F1]
+    {exp(-x)+3};
+\addlegendentry{$f_1(x)=e^{-x}+3$}
+
+\addplot[blue, domain=0.08:3.1, samples=300, thick, name path=F2]
+    {2*x-2};
+\addlegendentry{$f_2(x)=2x-2$}
+
+\addplot[red, domain=0.08:3.1, samples=300, thick, name path=F3]
+    {1/x};
+\addlegendentry{$f_3(x)=1/x$}
+
+\addplot[blue!20, samples=300]
+    fill between[of=F1 and F3, soft clip={domain=0.2655:1.3660}];
+\addplot[blue!20, samples=300]
+    fill between[of=F1 and F2, soft clip={domain=1.3660:2.5395}];
+\addlegendentry{$S \approx 3{,}6358$}
+
+% Вертикальные пунктиры к точкам пересечения
+\addplot[dashed, thin] coordinates { (0.2655, 3.7669) (0.2655, 0) };
+\addplot[color=black] coordinates {(0.2655, 0)}
+    node [label={below left:{\small $x_A$}}]{};
+
+\addplot[dashed, thin] coordinates { (1.3660, 0.7321) (1.3660, 0) };
+\addplot[color=black] coordinates {(1.3660, 0)}
+    node [label={below:{\small $x_B$}}]{};
+
+\addplot[dashed, thin] coordinates { (2.5395, 3.0790) (2.5395, 0) };
+\addplot[color=black] coordinates {(2.5395, 0)}
+    node [label={below right:{\small $x_C$}}]{};
+
+\end{axis}
+\end{tikzpicture}
+\caption{Плоская фигура с отмеченными точками пересечения}
+\label{plot2}
+\end{figure}
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Структура программы и спецификация функций}
+
+Программа состоит из четырех модулей:
+
+\begin{description}
+    \item[\texttt{functions.asm}] ---
+        функции $f_1$, $f_2$, $f_3$ и их производные $f_1'$, $f_2'$, $f_3'$,
+        реализованные на ассемблере NASM x86-32 с использованием сопроцессора x87 FPU.
+        Соглашение вызова --- \texttt{cdecl}: аргумент \texttt{long double}
+        передается на стеке по смещению \texttt{[ebp+8]}, возвращаемое значение --- в \texttt{ST(0)}.
+
+    \item[\texttt{root.c}] ---
+        функция \texttt{root()}, находящая корень $F(x) = f(x) - g(x) = 0$ на отрезке $[a, b]$.
+        Метод выбирается при компиляции:
+        \texttt{-DMETHOD\_NEWTON} --- метод Ньютона,
+        иначе --- метод хорд.
+
+    \item[\texttt{integral.c}] ---
+        функция \texttt{integral()}, вычисляющая определенный интеграл
+        методом Симпсона с контролем точности по правилу Рунге.
+
+    \item[\texttt{main.c}] ---
+        разбор аргументов командной строки, вычисление корней и интеграла,
+        вывод результатов, режим тестирования.
+\end{description}
+
+\medskip
+\noindent Спецификации основных функций:
+
+\begin{lstlisting}
+/* Находит корень F(x) = f(x) - g(x) = 0 на [a, b] с точностью eps.
+   df, dg - производные f и g (используются только методом Ньютона).
+   *iters - счётчик итераций. */
+long double root(
+    long double (*f)(long double), long double (*g)(long double),
+    long double (*df)(long double), long double (*dg)(long double),
+    long double a, long double b, long double eps, int *iters);
+
+/* Вычисляет интеграл f на [a, b] с точностью eps
+   методом Симпсона (критерий Рунге). */
+long double integral(
+    long double (*f)(long double),
+    long double a, long double b, long double eps);
+\end{lstlisting}
+
+\medskip
+\noindent Схема зависимостей модулей:
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners, minimum width=3cm, minimum height=0.8cm,
+                text centered, font=\ttfamily\small},
+    arr/.style={->, thick}]
+    \node[box] (asm)  at (0, 0)    {functions.asm};
+    \node[box] (root) at (4, 0)    {root.c};
+    \node[box] (intg) at (8, 0)    {integral.c};
+    \node[box] (main) at (4, -2)   {main.c};
+    \node[box] (prog) at (4, -4)   {prog};
+    \draw[arr] (asm)  -- (prog);
+    \draw[arr] (root) -- (prog);
+    \draw[arr] (intg) -- (prog);
+    \draw[arr] (main) -- (prog);
+    \draw[arr] (main.north) -- (root.south);
+    \draw[arr] (main.north) -- (intg.south);
+\end{tikzpicture}
+\end{center}
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Сборка программы (Make-файл)}
+
+Сборка выполняется командой \texttt{make} из директории \texttt{submissions/kotsin/}.
+Для переключения метода нахождения корней используется параметр \texttt{METHOD}:
+
+\begin{lstlisting}
+make                       # метод Ньютона (по умолчанию)
+make METHOD=METHOD_CHORDS  # метод хорд
+make clean                 # удаление объектных файлов и исполняемого файла
+\end{lstlisting}
+
+\noindent Текст Make-файла:
+
+\begin{lstlisting}
+METHOD  ?= METHOD_NEWTON
+
+CC       = gcc
+ASM      = nasm
+CFLAGS   = -m32 -Wall -Wextra -D$(METHOD)
+ASMFLAGS = -f elf32
+
+SRCDIR = src
+OBJDIR = obj
+
+OBJS = $(OBJDIR)/main.o $(OBJDIR)/root.o \
+       $(OBJDIR)/integral.o $(OBJDIR)/functions.o
+
+all: $(OBJDIR) prog
+
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
+
+prog: $(OBJS)
+	$(CC) -m32 -no-pie -o $@ $^ -lm
+
+$(OBJDIR)/main.o: $(SRCDIR)/main.c
+	$(CC) $(CFLAGS) -I$(SRCDIR) -c -o $@ $<
+
+$(OBJDIR)/root.o: $(SRCDIR)/root.c
+	$(CC) $(CFLAGS) -I$(SRCDIR) -c -o $@ $<
+
+$(OBJDIR)/integral.o: $(SRCDIR)/integral.c
+	$(CC) $(CFLAGS) -I$(SRCDIR) -c -o $@ $<
+
+$(OBJDIR)/functions.o: $(SRCDIR)/functions.asm
+	$(ASM) $(ASMFLAGS) -o $@ $<
+
+clean:
+	rm -rf $(OBJDIR) prog
+\end{lstlisting}
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Отладка программы, тестирование функций}
+
+Для запуска тестов используются ключи \texttt{--test-root} и \texttt{--test-integral}.
+Выбор тестовых функций обеспечивает аналитически известный ответ и не более одного
+тривиального теста (для Симпсона тривиальными являются полиномы степени $\leq 3$).
+
+\subsection{Тестирование функции \texttt{root()}}
+
+\textbf{Тест 1.} $x^2 = 2$ на $[1;\,2]$.
+
+$F(x) = x^2 - 2$, $F'(x) = 2x > 0$ на $[1;\,2]$ (монотонно возрастает).
+Точный корень: $x^* = \sqrt{2} \approx 1{,}41421356$.
+$F(1) = -1 < 0$, $F(2) = 2 > 0$.
+
+Результат: корень $= 1{,}414213562373095$, $|x - x^*| < 10^{-15}$, 4 итерации.
+
+\medskip
+\textbf{Тест 2.} $\sin x = 0$ на $[2;\,4]$.
+
+$F(x) = \sin x$, $F'(x) = \cos x$.
+На $[2;\,4]$: $F' < 0$ (монотонно убывает), единственный корень $x^* = \pi \approx 3{,}14159265$.
+$F(2) > 0$, $F(4) < 0$.
+
+Результат: корень $= 3{,}141592653589793$, $|x - x^*| < 10^{-15}$, 4 итерации.
+
+\medskip
+\textbf{Тест 3.} $e^x = 2$ на $[0{,}5;\,1]$.
+
+$F(x) = e^x - 2$, $F'(x) = e^x > 0$ (монотонно возрастает).
+Точный корень: $x^* = \ln 2 \approx 0{,}69314718$.
+$F(0{,}5) \approx -0{,}35 < 0$, $F(1) \approx 0{,}72 > 0$.
+
+Результат: корень $= 0{,}693147180559945$, $|x - x^*| < 10^{-15}$, 4 итерации.
+
+\subsection{Тестирование функции \texttt{integral()}}
+
+\textbf{Тест 1 (тривиальный).} $\displaystyle\int_0^1 x^2\,dx = \frac{1}{3}$.
+
+Симпсон точен для полиномов степени $\leq 3$, поэтому ошибка машинная ($\approx 0$).
+Результат: $0{,}333333333333333$, $|\Delta| < 10^{-15}$.
+
+\medskip
+\textbf{Тест 2.} $\displaystyle\int_0^{\pi} \sin x\,dx = 2$.
+
+Результат: $2{,}000000000000984$, $|\Delta| \approx 10^{-12}$ при $\varepsilon = 10^{-12}$.
+
+\medskip
+\textbf{Тест 3.} $\displaystyle\int_1^{e} \frac{1}{x}\,dx = \ln e - \ln 1 = 1$.
+
+Результат: $1{,}000000000000259$, $|\Delta| \approx 2{,}6 \cdot 10^{-13}$ при $\varepsilon = 10^{-12}$.
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Программа на Си и на Ассемблере}
+
+Исходные тексты программы приложены к отчету в архиве.
+Архив содержит директорию \texttt{submissions/kotsin/} со следующей структурой:
+
+\begin{lstlisting}
+submissions/kotsin/
+    Makefile
+    src/
+        functions.asm
+        root.c      root.h
+        integral.c  integral.h
+        main.c
+    report/
+        report.pdf
+        report.tex
+\end{lstlisting}
+
+\newpage
+
+% ------------------------------------------------------------------
+\section{Анализ допущенных ошибок}
+
+Метод Ньютона сходится квадратично~\cite{math}: на гладких функциях с ненулевой
+производной в корне каждая итерация удваивает число верных знаков.
+Этим объясняется малое число итераций (3--4) даже при $\varepsilon = 10^{-8}$.
+
+Метод хорд сходится сверхлинейно, что медленнее Ньютона: на тех же отрезках
+требуется 3--11 итераций в зависимости от функции.
+
+Для метода Симпсона погрешность убывает как $O(h^4)$, поэтому
+правило Рунге с коэффициентом $1/15$ дает надежную оценку.
+При $\varepsilon = 10^{-6}$ метод сходится за несколько удвоений шага.
+
+Основной источник погрешности --- округление при вычислении $e^{-x}$
+через цепочку инструкций x87 (\texttt{fldl2e}, \texttt{f2xm1}, \texttt{fscale}).
+Погрешность этой последовательности не превышает нескольких ULP (единиц в
+последнем разряде \texttt{long double}), что значительно лучше требуемой $\varepsilon = 10^{-8}$.
+
+\newpage
+\begin{raggedright}
+\addcontentsline{toc}{section}{Список цитируемой литературы}
+\begin{thebibliography}{99}
+\bibitem{math} Ильин~В.\,А., Садовничий~В.\,А., Сендов~Бл.\,Х.
+    Математический анализ. Т.\,1 ---
+    Москва: Наука, 1985.
+\end{thebibliography}
+\end{raggedright}
+
+\end{document}
