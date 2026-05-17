@@ -14,79 +14,66 @@ extern real df3(real x);
 
 #define EPS1 1e-8L
 #define EPS2 1e-8L
-#define MAX_ITERS 100000
 
-static long root_iters = 0;
-static long integral_iters = 0;
-
-static real value(func_t f, func_t g, real x)
-{
-    return f(x) - g(x);
-}
-
-#ifdef USE_CHORD
-static const char *method_name(void)
-{
-    return "chord";
-}
+long root_iters;
+long integral_iters;
 
 real root(func_t f, func_t g, func_t df, func_t dg,
           real a, real b, real eps, real *x)
 {
-    real fa = value(f, g, a);
-    real fb = value(f, g, b);
+    real fa, fx;
+
+    root_iters = 0;
+
+#ifdef USE_CHORD
+    real fb;
 
     (void)df;
     (void)dg;
-    root_iters = 0;
 
-    /* Chord method for equation f(x) - g(x) = 0. */
-    while (fabsl(b - a) > eps && root_iters < MAX_ITERS) {
+    fa = f(a) - g(a);
+    fb = f(b) - g(b);
+
+    /* Method of chords. */
+    while (fabsl(b - a) > eps && root_iters < 100000) {
         *x = (a * fb - b * fa) / (fb - fa);
+        fx = f(*x) - g(*x);
 
-        if (value(f, g, a) * value(f, g, *x) <= 0.0L) {
+        if (fa * fx <= 0.0L) {
             b = *x;
-            fb = value(f, g, b);
+            fb = fx;
         } else {
             a = *x;
-            fa = value(f, g, a);
+            fa = fx;
         }
 
         root_iters++;
     }
-
-    return *x;
-}
 #else
-static const char *method_name(void)
-{
-    return "newton";
-}
+    real dfx, old_x;
 
-real root(func_t f, func_t g, func_t df, func_t dg,
-          real a, real b, real eps, real *x)
-{
-    real old_x;
-    real derivative;
-
+    /* Newton method. */
     *x = (a + b) / 2.0L;
-    root_iters = 0;
 
-    /* Newton method for equation f(x) - g(x) = 0. */
     do {
         old_x = *x;
-        derivative = df(*x) - dg(*x);
+        fx = f(*x) - g(*x);
+        dfx = df(*x) - dg(*x);
 
-        if (fabsl(derivative) > 1e-20L) {
-            *x = *x - value(f, g, *x) / derivative;
-        }
-
-        /* If Newton jumps out of the segment, return to the middle. */
-        if (*x <= a || *x >= b) {
+        if (fabsl(dfx) > 1e-20L) {
+            *x = *x - fx / dfx;
+        } else {
             *x = (a + b) / 2.0L;
         }
 
-        if (value(f, g, a) * value(f, g, *x) <= 0.0L) {
+        if (*x < a || *x > b) {
+            *x = (a + b) / 2.0L;
+        }
+
+        fa = f(a) - g(a);
+        fx = f(*x) - g(*x);
+
+        if (fa * fx <= 0.0L) {
             b = *x;
         } else {
             a = *x;
@@ -94,28 +81,31 @@ real root(func_t f, func_t g, func_t df, func_t dg,
 
         root_iters++;
     } while (fabsl(*x - old_x) > eps &&
-             fabsl(value(f, g, *x)) > eps &&
-             root_iters < MAX_ITERS);
+             fabsl(f(*x) - g(*x)) > eps &&
+             root_iters < 100000);
+#endif
 
     return *x;
 }
-#endif
 
 real integral(func_t f, real a, real b, real eps)
 {
     int n = 2;
-    real old_sum = 0.0L;
-    real new_sum = 0.0L;
+    int i;
+    real h, x;
+    real sum;
+    real old_res = 0.0L;
+    real res = 0.0L;
 
     integral_iters = 0;
 
     while (1) {
-        real h = (b - a) / n;
-        real sum = f(a) + f(b);
+        h = (b - a) / n;
+        sum = f(a) + f(b);
 
-        for (int i = 1; i < n; i++) {
-            real x = a + h * i;
-
+        /* Simpson formula: coefficients 4, 2, 4, 2, ... */
+        for (i = 1; i < n; i++) {
+            x = a + i * h;
             if (i % 2 == 0) {
                 sum += 2.0L * f(x);
             } else {
@@ -123,82 +113,85 @@ real integral(func_t f, real a, real b, real eps)
             }
         }
 
-        new_sum = sum * h / 3.0L;
+        res = sum * h / 3.0L;
         integral_iters++;
 
-        /* Runge rule for Simpson formula. */
-        if (integral_iters > 1 && fabsl(new_sum - old_sum) / 15.0L < eps) {
+        if (integral_iters > 1 && fabsl(res - old_res) / 15.0L < eps) {
             break;
         }
 
-        old_sum = new_sum;
-        n *= 2;
+        old_res = res;
+        n = n * 2;
 
-        if (n > (1 << 26)) {
+        if (n > 10000000) {
             break;
         }
     }
 
-    return new_sum;
+    return res;
 }
 
-static real f3_minus_f1(real x)
+real f3_f1(real x)
 {
     return f3(x) - f1(x);
 }
 
-static real f2_minus_f1(real x)
+real f2_f1(real x)
 {
     return f2(x) - f1(x);
 }
 
-static void print_help(const char *program_name)
+void print_help(void)
 {
-    printf("Usage: %s [options]\n", program_name);
     printf("Options:\n");
-    printf("  --help           print this help\n");
-    printf("  --roots          print intersection points\n");
-    printf("  --iterations     print iteration counts\n");
-    printf("  --test-root      test root function\n");
-    printf("  --test-integral  test integral function\n");
-    printf("  --test           run all tests\n");
+    printf("  --help\n");
+    printf("  --roots\n");
+    printf("  --iterations\n");
+    printf("  --test-root\n");
+    printf("  --test-integral\n");
+    printf("  --test\n");
 }
 
-static int test_root(void)
+int test_root(void)
 {
-    real x = 0.0L;
-    real answer = (4.0L - sqrtl(26.0L)) / 2.0L;
+    real x;
+    real ans;
 
+    ans = (4.0L - sqrtl(26.0L)) / 2.0L;
     root(f2, f3, df2, df3, -1.0L, -0.1L, EPS1, &x);
-    printf("root test: got %.12Lf, expected %.12Lf\n", x, answer);
 
-    return fabsl(x - answer) < 1e-7L;
+    printf("root test: got %.12Lf, expected %.12Lf\n", x, ans);
+
+    if (fabsl(x - ans) < 1e-7L) {
+        return 1;
+    }
+
+    return 0;
 }
 
-static int test_integral(void)
+int test_integral(void)
 {
-    real answer = integral(f2, 0.0L, 1.0L, EPS2);
+    real s;
 
-    printf("integral test: got %.12Lf, expected 7.000000000000\n", answer);
+    s = integral(f2, 0.0L, 1.0L, EPS2);
+    printf("integral test: got %.12Lf, expected 7.000000000000\n", s);
 
-    return fabsl(answer - 7.0L) < 1e-7L;
+    if (fabsl(s - 7.0L) < 1e-7L) {
+        return 1;
+    }
+
+    return 0;
 }
 
 int main(int argc, char **argv)
 {
-    real x13 = 0.0L;
-    real x23 = 0.0L;
-    real x12 = 0.0L;
-    real left_area;
-    real right_area;
-    real area;
-    long it13;
-    long it23;
-    long it12;
-    long left_it;
-    long right_it;
+    real x13, x23, x12;
+    real s1, s2, s;
+    long it13, it23, it12;
+    long int_it1, int_it2;
+    int i;
 
-    /* Intersections are searched on fixed segments for variant 8. */
+    /* Roots of intersections for variant 8. */
     root(f1, f3, df1, df3, -3.0L, -2.0L, EPS1, &x13);
     it13 = root_iters;
 
@@ -208,36 +201,41 @@ int main(int argc, char **argv)
     root(f1, f2, df1, df2, 1.0L, 2.0L, EPS1, &x12);
     it12 = root_iters;
 
-    left_area = integral(f3_minus_f1, x13, x23, EPS2);
-    left_it = integral_iters;
+    /* The whole area is the sum of two parts. */
+    s1 = integral(f3_f1, x13, x23, EPS2);
+    int_it1 = integral_iters;
 
-    right_area = integral(f2_minus_f1, x23, x12, EPS2);
-    right_it = integral_iters;
+    s2 = integral(f2_f1, x23, x12, EPS2);
+    int_it2 = integral_iters;
 
-    area = left_area + right_area;
+    s = s1 + s2;
 
     if (argc == 1) {
-        printf("Variant 8, method: %s\n", method_name());
-        printf("x13 = %.12Lf (f1 = f3)\n", x13);
-        printf("x23 = %.12Lf (f2 = f3)\n", x23);
-        printf("x12 = %.12Lf (f1 = f2)\n", x12);
-        printf("area = %.12Lf\n", area);
+#ifdef USE_CHORD
+        printf("method: chord\n");
+#else
+        printf("method: newton\n");
+#endif
+        printf("x13 = %.12Lf\n", x13);
+        printf("x23 = %.12Lf\n", x23);
+        printf("x12 = %.12Lf\n", x12);
+        printf("area = %.12Lf\n", s);
         return 0;
     }
 
-    for (int i = 1; i < argc; i++) {
+    for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0) {
-            print_help(argv[0]);
+            print_help();
         } else if (strcmp(argv[i], "--roots") == 0) {
-            printf("x13 = %.12Lf (f1 = f3)\n", x13);
-            printf("x23 = %.12Lf (f2 = f3)\n", x23);
-            printf("x12 = %.12Lf (f1 = f2)\n", x12);
+            printf("x13 = %.12Lf\n", x13);
+            printf("x23 = %.12Lf\n", x23);
+            printf("x12 = %.12Lf\n", x12);
         } else if (strcmp(argv[i], "--iterations") == 0) {
-            printf("f1=f3 root iterations: %ld\n", it13);
-            printf("f2=f3 root iterations: %ld\n", it23);
-            printf("f1=f2 root iterations: %ld\n", it12);
-            printf("left integral iterations: %ld\n", left_it);
-            printf("right integral iterations: %ld\n", right_it);
+            printf("x13 iterations: %ld\n", it13);
+            printf("x23 iterations: %ld\n", it23);
+            printf("x12 iterations: %ld\n", it12);
+            printf("first integral iterations: %ld\n", int_it1);
+            printf("second integral iterations: %ld\n", int_it2);
         } else if (strcmp(argv[i], "--test-root") == 0) {
             if (!test_root()) {
                 return 1;
@@ -247,13 +245,15 @@ int main(int argc, char **argv)
                 return 1;
             }
         } else if (strcmp(argv[i], "--test") == 0) {
-            if (!test_root() || !test_integral()) {
+            if (!test_root()) {
+                return 1;
+            }
+            if (!test_integral()) {
                 return 1;
             }
             printf("all tests passed\n");
         } else {
-            printf("unknown option: %s\n", argv[i]);
-            printf("try --help\n");
+            printf("unknown option\n");
             return 1;
         }
     }
