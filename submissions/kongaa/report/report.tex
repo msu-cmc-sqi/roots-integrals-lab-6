@@ -1,0 +1,422 @@
+\documentclass[a4paper,12pt,titlepage,final]{article}
+
+\usepackage[T1,T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepgfplotslibrary{fillbetween}
+
+\usepackage{geometry}
+\usepackage{indentfirst}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{verbatim}
+
+\geometry{a4paper,left=30mm,top=30mm,bottom=30mm,right=30mm}
+\setcounter{secnumdepth}{0}
+\pgfplotsset{compat=1.18}
+
+\begin{document}
+
+\begin{titlepage}
+    \begin{center}
+        {\small \sc Московский государственный университет\\
+        имени М.~В.~Ломоносова\\
+        Факультет вычислительной математики и кибернетики\\}
+
+        \vfill
+
+        {\Large \sc Отчет по заданию №6}\\
+        ~\\
+        {\large \bf <<Сборка многомодульных программ.\\
+        Вычисление корней уравнений и определенных интегралов>>}\\
+        ~\\
+        {\large \bf Вариант 7}
+    \end{center}
+
+    \begin{flushright}
+        \vfill
+        {Выполнила:\\
+        студентка 104 группы\\
+        Конгаа~А.~Н.\\
+        ~\\
+        Преподаватель:\\
+        Гуляев~Д.~А.}
+    \end{flushright}
+
+    \begin{center}
+        \vfill
+        {\small Москва\\2026}
+    \end{center}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Постановка задачи}
+
+В данной работе требуется реализовать численные методы, позволяющие вычислить площадь плоской фигуры, ограниченной тремя кривыми:
+\[
+    y=f_1(x), \qquad y=f_2(x), \qquad y=f_3(x).
+\]
+
+Для варианта 7 заданы функции:
+\[
+    f_1(x)=\ln x,
+\]
+\[
+    f_2(x)=-2x+14,
+\]
+\[
+    f_3(x)=\frac{1}{2-x}+6.
+\]
+
+Для вычисления площади необходимо найти точки пересечения графиков функций, представить площадь фигуры как алгебраическую сумму определенных интегралов и вычислить эти интегралы с заданной точностью.
+
+В работе используются следующие параметры.
+
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+Параметр & Значение \\
+\hline
+Тип данных & \texttt{double} \\
+\hline
+Методы решения уравнений & деление пополам, комбинированный метод \\
+\hline
+Метод интегрирования & метод трапеций \\
+\hline
+Точности вычислений & $10^{-3}$, $10^{-5}$, $10^{-7}$ \\
+\hline
+Языки программирования & C, NASM32 \\
+\hline
+Соглашение вызова & \texttt{cdecl} \\
+\hline
+\end{tabular}
+\end{center}
+
+Функции $f_1$, $f_2$, $f_3$ реализованы на языке ассемблера NASM32 с использованием сопроцессора x87. Остальная часть программы реализована на языке C. Сборка выполняется с помощью \texttt{make}.
+
+\newpage
+
+\section{Математическое обоснование}
+
+Для нахождения границ фигуры требуется найти три точки пересечения графиков. Для этого решаются уравнения:
+\[
+    f_1(x)=f_3(x), \qquad f_2(x)=f_3(x), \qquad f_1(x)=f_2(x).
+\]
+
+Функция $f_3(x)$ имеет разрыв в точке $x=2$, поэтому отрезки для поиска корней выбирались правее этой точки. На выбранных отрезках функции непрерывны, а разность соответствующих функций меняет знак, следовательно, метод деления пополам применим.
+
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+Пересечение & Уравнение & Отрезок поиска \\
+\hline
+$x_{13}$ & $f_1(x)-f_3(x)=0$ & $[2.1;2.3]$ \\
+\hline
+$x_{23}$ & $f_2(x)-f_3(x)=0$ & $[4.0;4.5]$ \\
+\hline
+$x_{12}$ & $f_1(x)-f_2(x)=0$ & $[6.0;6.2]$ \\
+\hline
+\end{tabular}
+\end{center}
+
+На рисунке~\ref{plot1} изображены графики функций.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    axis lines=middle,
+    xmin=1.8, xmax=6.5,
+    ymin=0, ymax=11,
+    width=13cm,
+    height=8cm,
+    samples=256,
+    legend cell align=left
+]
+\addplot[green,thick,domain=1.9:6.5] {ln(x)};
+\addlegendentry{$y=\ln x$}
+
+\addplot[blue,thick,domain=1.9:6.5] {-2*x+14};
+\addlegendentry{$y=-2x+14$}
+
+\addplot[red,thick,domain=2.05:6.5] {1/(2-x)+6};
+\addlegendentry{$y=\frac{1}{2-x}+6$}
+\end{axis}
+\end{tikzpicture}
+\caption{Графики заданных функций}
+\label{plot1}
+\end{figure}
+
+В результате численных расчетов были получены следующие абсциссы точек пересечения:
+\[
+    x_{13}\approx 2.191743425,\qquad
+    x_{23}\approx 4.224744871,\qquad
+    x_{12}\approx 6.096169674.
+\]
+
+На отрезке $[x_{13},x_{23}]$ верхней границей фигуры является график $f_3(x)$, а нижней границей является график $f_1(x)$. На отрезке $[x_{23},x_{12}]$ верхней границей фигуры является график $f_2(x)$, а нижней границей является график $f_1(x)$.
+
+Следовательно, площадь фигуры вычисляется по формуле:
+\[
+S=
+\int_{x_{13}}^{x_{23}}\left(f_3(x)-f_1(x)\right)\,dx+
+\int_{x_{23}}^{x_{12}}\left(f_2(x)-f_1(x)\right)\,dx.
+\]
+
+Для поиска корней была выбрана точность $\varepsilon_1=10^{-5}$. Для вычисления интегралов была выбрана точность $\varepsilon_2=10^{-5}$. Эти значения меньше требуемой точности итоговой площади $\varepsilon=10^{-3}$ и дают устойчивый результат при вычислении площади.
+
+\newpage
+
+\section{Результаты экспериментов}
+
+В результате проведенных вычислений были получены координаты точек пересечения графиков и площадь фигуры.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+Величина & Значение \\
+\hline
+$x_{13}$ & 2.191743425 \\
+\hline
+$x_{23}$ & 4.224744871 \\
+\hline
+$x_{12}$ & 6.096169674 \\
+\hline
+$\displaystyle\int_{x_{13}}^{x_{23}}(f_3-f_1)\,dx$ & 9.1179 \\
+\hline
+$\displaystyle\int_{x_{23}}^{x_{12}}(f_2-f_1)\,dx$ & 2.1185 \\
+\hline
+Площадь фигуры $S$ & 11.23637645 \\
+\hline
+\end{tabular}
+\caption{Результаты вычислений}
+\label{table1}
+\end{table}
+
+Результат также был проверен при различных значениях точности.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|}
+\hline
+$\varepsilon$ & Площадь фигуры \\
+\hline
+$10^{-3}$ & 11.236 \\
+\hline
+$10^{-5}$ & 11.23637 \\
+\hline
+$10^{-7}$ & 11.236376 \\
+\hline
+\end{tabular}
+\caption{Зависимость результата от точности}
+\end{table}
+
+На рисунке~\ref{plot2} показана область, площадь которой вычисляется программой.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    axis lines=middle,
+    xmin=1.8, xmax=6.5,
+    ymin=0, ymax=11,
+    width=13cm,
+    height=8cm,
+    samples=256,
+    legend cell align=left,
+    xticklabels={,,},
+    yticklabels={,,}
+]
+\addplot[green,thick,domain=1.9:6.5,name path=A] {ln(x)};
+\addlegendentry{$y=\ln x$}
+
+\addplot[blue,thick,domain=1.9:6.5,name path=B] {-2*x+14};
+\addlegendentry{$y=-2x+14$}
+
+\addplot[red,thick,domain=2.05:6.5,name path=C] {1/(2-x)+6};
+\addlegendentry{$y=\frac{1}{2-x}+6$}
+
+\addplot[blue!20] fill between[of=C and A,soft clip={domain=2.1917:4.2247}];
+\addplot[blue!20] fill between[of=B and A,soft clip={domain=4.2247:6.0962}];
+\addlegendentry{$S\approx 11.2364$}
+
+\addplot[dashed] coordinates {(2.1917,0) (2.1917,5.478)};
+\addplot[color=black] coordinates {(2.1917,0)} node[label={-90:{\small 2.1917}}]{};
+
+\addplot[dashed] coordinates {(4.2247,0) (4.2247,5.551)};
+\addplot[color=black] coordinates {(4.2247,0)} node[label={-90:{\small 4.2247}}]{};
+
+\addplot[dashed] coordinates {(6.0962,0) (6.0962,1.808)};
+\addplot[color=black] coordinates {(6.0962,0)} node[label={-90:{\small 6.0962}}]{};
+\end{axis}
+\end{tikzpicture}
+\caption{Плоская фигура, ограниченная графиками заданных уравнений}
+\label{plot2}
+\end{figure}
+
+При уменьшении $\varepsilon$ значение площади стабилизируется. Это подтверждает корректность выбранных методов и выбранных отрезков поиска корней.
+
+\newpage
+
+\section{Структура программы и спецификация функций}
+
+Программа состоит из нескольких модулей. Модули на языке C реализуют численные методы, обработку аргументов командной строки и вывод результатов. Модуль на языке NASM32 реализует заданные математические функции.
+
+\begin{center}
+\begin{tabular}{|c|p{10cm}|}
+\hline
+Файл & Назначение \\
+\hline
+\texttt{main.c} & основная программа, обработка ключей командной строки, вычисление площади \\
+\hline
+\texttt{root.c} & реализация методов решения уравнений \\
+\hline
+\texttt{integral.c} & реализация метода трапеций \\
+\hline
+\texttt{funcs.asm} & реализация функций $f_1$, $f_2$, $f_3$ на NASM32 \\
+\hline
+\texttt{funcs.h} & заголовочный файл с прототипами функций \\
+\hline
+\texttt{Makefile} & файл сборки программы \\
+\hline
+\end{tabular}
+\end{center}
+
+Разбиение программы на компоненты:
+\[
+\texttt{main.c}
+\rightarrow
+\begin{cases}
+\texttt{root.c},\\
+\texttt{integral.c},\\
+\texttt{funcs.asm}.
+\end{cases}
+\]
+
+Функция поиска корня имеет следующую спецификацию:
+\begin{verbatim}
+double root(
+    double (*f)(double),
+    double (*g)(double),
+    double a,
+    double b,
+    double eps
+);
+\end{verbatim}
+
+Функция ищет корень уравнения $f(x)-g(x)=0$ на отрезке $[a,b]$ с точностью $\varepsilon$.
+
+Функция вычисления интеграла имеет следующую спецификацию:
+\begin{verbatim}
+double integral(
+    double (*f)(double),
+    double a,
+    double b,
+    double eps
+);
+\end{verbatim}
+
+Функция вычисляет определенный интеграл функции $f$ на отрезке $[a,b]$ методом трапеций.
+
+\newpage
+
+\section{Сборка программы (Make-файл)}
+
+Сборка программы выполняется с помощью \texttt{make}. По умолчанию собирается версия программы, использующая метод деления пополам. Для сборки версии с комбинированным методом используется макрос \texttt{COMBINED}.
+
+\begin{verbatim}
+make
+make METHOD=COMBINED
+make clean
+\end{verbatim}
+
+Зависимости между модулями программы:
+\[
+\texttt{main.c},\ \texttt{root.c},\ \texttt{integral.c},\ \texttt{funcs.asm}
+\longrightarrow
+\texttt{main}
+\]
+
+\newpage
+
+\section{Отладка программы, тестирование функций}
+
+Отладка программы проводилась поэтапно. Сначала проверялись ассемблерные функции $f_1$, $f_2$, $f_3$. После этого отдельно тестировались функции \texttt{root} и \texttt{integral}. Затем проверялась вся программа целиком.
+
+Для проверки функции \texttt{root} использовалось уравнение с известным корнем:
+\[
+    x^2=4.
+\]
+На отрезке $[1;3]$ корень равен $x=2$.
+
+Для проверки функции \texttt{integral} использовался интеграл:
+\[
+    \int_1^2 \ln x\,dx.
+\]
+Его точное значение:
+\[
+    2\ln2-1.
+\]
+
+В программе реализованы ключи командной строки:
+\begin{itemize}
+    \item \texttt{--help} --- вывод справки;
+    \item \texttt{--points} --- вывод точек пересечения;
+    \item \texttt{--iterations} --- вывод числа итераций;
+    \item \texttt{--test} --- запуск тестов.
+\end{itemize}
+
+Полученные численные результаты совпали с аналитическими значениями с требуемой точностью.
+
+\newpage
+
+\section{Программа на Си и на Ассемблере}
+
+Исходные тексты программы имеются в архиве, который приложен к этому отчету. Программа состоит из модулей на языке C и одного модуля на языке ассемблера NASM32. Взаимодействие между C и ассемблером выполняется по соглашению вызова \texttt{cdecl}.
+
+Функции, реализованные на ассемблере:
+\[
+    f_1(x)=\ln x,
+\]
+\[
+    f_2(x)=-2x+14,
+\]
+\[
+    f_3(x)=\frac{1}{2-x}+6.
+\]
+
+\newpage
+
+\section{Анализ допущенных ошибок}
+
+Во время выполнения работы возникали ошибки, связанные с выбором отрезков поиска корней и с особенностями сборки многомодульной программы.
+
+Основные ошибки:
+\begin{itemize}
+    \item неверный выбор отрезков поиска корней;
+    \item попытка искать корень на отрезке, содержащем точку разрыва функции $f_3$;
+    \item ошибки в именах ассемблерных функций при сборке под Windows и Linux;
+    \item ошибки, связанные с соглашением вызова \texttt{cdecl};
+    \item недостаточно малые значения $\varepsilon_1$ и $\varepsilon_2$ при вычислении площади.
+\end{itemize}
+
+После исправления ошибок программа стала корректно вычислять точки пересечения графиков и площадь плоской фигуры.
+
+\newpage
+
+\begin{raggedright}
+\addcontentsline{toc}{section}{Список цитируемой литературы}
+\begin{thebibliography}{99}
+\bibitem{math} Ильин~В.\,А., Садовничий~В.\,А., Сендов~Бл.\,Х. Математический анализ. Т.\,1~---
+Москва: Наука, 1985.
+\end{thebibliography}
+\end{raggedright}
+
+\end{document}
