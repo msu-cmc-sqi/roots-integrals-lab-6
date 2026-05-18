@@ -1,0 +1,366 @@
+\documentclass[a4paper,12pt,titlepage,finall]{article}
+
+\usepackage[T1,T2A]{fontenc}     % форматы шрифтов
+\usepackage[utf8x]{inputenc}     % кодировка символов, используемая в данном файле
+\usepackage[russian]{babel}      % пакет русификации
+\usepackage{tikz}                % для создания иллюстраций
+\usepackage{pgfplots}            % для вывода графиков функций
+\usepackage{geometry}            % для настройки размера полей
+\usepackage{indentfirst}         % для отступа в первом абзаце секции
+\usepackage{amsmath}
+
+% выбираем размер листа А4, все поля ставим по 3см
+\geometry{a4paper,left=30mm,top=30mm,bottom=30mm,right=30mm}
+
+\setcounter{secnumdepth}{0}      % отключаем нумерацию секций
+
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning}
+\usepgfplotslibrary{fillbetween} % для изображения областей на графиках
+
+\begin{document}
+% Титульный лист
+\begin{titlepage}
+    \begin{center}
+    {\small \sc Московский государственный университет \\имени М.~В.~Ломоносова\\
+    Факультет вычислительной математики и кибернетики\\}
+    \vfill
+    {\Large \sc Отчет по заданию №6}\\
+    ~\\
+    {\large \bf <<Сборка многомодульных программ. \\
+    Вычисление корней уравнений и определенных интегралов.>>}\\
+    ~\\
+    {\large \bf Вариант 8}
+    \end{center}
+    \begin{flushright}
+    \vfill {Выполнил:\\
+    студент 104 группы\\
+    Д.~М.~Алексеевич\\
+    ~\\
+    Преподаватель:\\
+    Д.~А.~Гуляев
+    }
+    \end{flushright}
+    \begin{center}
+    \vfill
+    {\small Москва\\2026}
+    \end{center}
+\end{titlepage}
+
+% Автоматически генерируем оглавление на отдельной странице
+\tableofcontents
+\newpage
+
+\section{Постановка задачи}
+
+Требуется реализовать многомодульную программу для вычисления площади
+плоской фигуры, ограниченной тремя кривыми
+\[
+    y=f_1(x),\qquad y=f_2(x),\qquad y=f_3(x).
+\]
+Для варианта 8 заданы функции
+\[
+    f_1(x)=e^x+2,\qquad
+    f_2(x)=-2x+8,\qquad
+    f_3(x)=-\frac{5}{x}.
+\]
+
+Абсциссы вершин фигуры находятся как корни уравнений $f_i(x)-f_j(x)=0$.
+В программе реализованы два метода приближенного решения уравнений:
+метод Ньютона и метод хорд. Выбор метода выполняется во время сборки
+с помощью макроса препроцессора. Определенные интегралы вычисляются
+составной формулой Симпсона.
+
+Функции $f_1$, $f_2$, $f_3$ и их производные реализованы на ассемблере
+NASM32 с использованием арифметики x87 и соглашения вызова cdecl.
+Остальная часть программы написана на языке C. Тип вычислений:
+\texttt{long double}.
+
+\newpage
+
+\section{Математическое обоснование}
+
+Графики заданных функций показаны на рис.~\ref{plot1}. Функция $f_3$
+имеет разрыв в точке $x=0$, поэтому при выборе отрезков локализации
+корней необходимо рассматривать левую и правую полуплоскости отдельно.
+Анализ знаков разностей функций показывает, что замкнутая область
+образуется точками пересечения $f_1=f_3$, $f_2=f_3$ и $f_1=f_2$.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+             axis lines=middle,
+             restrict x to domain=-3.5:2.5,
+             restrict y to domain=-1:12,
+             enlargelimits,
+             legend cell align=left,
+             scale=1.2]
+
+\addplot[green,domain=-3.5:2.5,samples=256,thick] {exp(x)+2};
+\addlegendentry{$y=e^x+2$}
+
+\addlegendimage{empty legend}\addlegendentry{}
+
+\addplot[blue,domain=-3.5:2.5,samples=256,thick] {-2*x+8};
+\addlegendentry{$y=-2x+8$}
+
+\addplot[red,domain=-3.5:-0.08,samples=256,thick] {-5/x};
+\addlegendentry{$y=-\frac{5}{x}$}
+
+\end{axis}
+\end{tikzpicture}
+\caption{Графики функций варианта 8}
+\label{plot1}
+\end{figure}
+
+Для поиска корней выбраны следующие отрезки:
+\[
+    x_{13}\in[-3,-2],\qquad
+    x_{23}\in[-1,-0.1],\qquad
+    x_{12}\in[1,2].
+\]
+На концах каждого из этих отрезков соответствующая разность функций
+меняет знак, а сами функции непрерывны на выбранных отрезках. Поэтому
+на каждом отрезке существует корень. Условия применимости используемых
+численных методов и оценки погрешности вычисления корней и интегралов
+следуют из стандартных результатов математического анализа~\cite{math}.
+
+Для достижения точности вычисления площади порядка $10^{-4}$ выбраны
+более строгие внутренние точности
+\[
+    \varepsilon_1=10^{-8},\qquad \varepsilon_2=10^{-8}.
+\]
+При интегрировании используется правило Рунге для формулы Симпсона:
+\[
+    \frac{|I_{2n}-I_n|}{15}<\varepsilon_2.
+\]
+
+\newpage
+
+\section{Результаты экспериментов}
+
+Координаты найденных точек пересечения приведены в таблице~\ref{table1}.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+Кривые & $x$ & $y$ \\
+\hline
+1 и 3 & -2.390536703909 & 2.091580519063 \\
+2 и 3 & -0.549509756796 & 9.099019513596 \\
+1 и 2 &  1.251757931391 & 5.496484137217 \\
+\hline
+\end{tabular}
+\caption{Координаты точек пересечения}
+\label{table1}
+\end{table}
+
+Площадь фигуры представляется как сумма двух интегралов:
+\[
+S =
+\int_{x_{13}}^{x_{23}}\bigl(f_3(x)-f_1(x)\bigr)\,dx+
+\int_{x_{23}}^{x_{12}}\bigl(f_2(x)-f_1(x)\bigr)\,dx.
+\]
+В результате вычислений получено
+\[
+    S\approx 9.806944933573.
+\]
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+             axis lines=middle,
+             restrict x to domain=-3.5:2.5,
+             restrict y to domain=-1:12,
+             enlargelimits,
+             legend cell align=left,
+             scale=1.2,
+             xticklabels={,,},
+             yticklabels={,,}]
+
+\addplot[green,domain=-3.5:2.5,samples=256,thick,name path=A] {exp(x)+2};
+\addlegendentry{$y=e^x+2$}
+
+\addlegendimage{empty legend}\addlegendentry{}
+
+\addplot[blue,domain=-3.5:2.5,samples=256,thick,name path=B] {-2*x+8};
+\addlegendentry{$y=-2x+8$}
+
+\addplot[red,domain=-3.5:-0.08,samples=256,thick,name path=C] {-5/x};
+\addlegendentry{$y=-\frac{5}{x}$}
+
+\addplot[blue!20,samples=256] fill between[of=C and A,soft clip={domain=-2.390536703909:-0.549509756796}];
+\addplot[blue!20,samples=256] fill between[of=B and A,soft clip={domain=-0.549509756796:1.251757931391}];
+\addlegendentry{$S=9.8069$}
+
+\addplot[dashed] coordinates { (-2.390536703909, 2.091580519063) (-2.390536703909, 0) };
+\addplot[color=black] coordinates {(-2.390536703909, 0)} node [label={-135:{\small -2.3905}}]{};
+
+\addplot[dashed] coordinates { (-0.549509756796, 9.099019513596) (-0.549509756796, 0) };
+\addplot[color=black] coordinates {(-0.549509756796, 0)} node [label={-90:{\small -0.5495}}]{};
+
+\addplot[dashed] coordinates { (1.251757931391, 5.496484137217) (1.251757931391, 0) };
+\addplot[color=black] coordinates {(1.251757931391, 0)} node [label={-45:{\small 1.2518}}]{};
+
+\end{axis}
+\end{tikzpicture}
+\caption{Плоская фигура, ограниченная графиками заданных уравнений}
+\label{plot2}
+\end{figure}
+
+\newpage
+
+\section{Структура программы и спецификация функций}
+
+Программа состоит из следующих модулей:
+\begin{itemize}
+\item \texttt{src/main.c} --- основной модуль, содержащий функции
+    \texttt{root}, \texttt{integral}, обработку ключей командной строки,
+    тесты и вычисление площади;
+\item \texttt{src/functions.asm} --- ассемблерный модуль, содержащий
+    функции \texttt{f1}, \texttt{f2}, \texttt{f3}, \texttt{df1},
+    \texttt{df2}, \texttt{df3};
+\item \texttt{Makefile} --- сценарий сборки программы.
+\end{itemize}
+
+Основные функции программы:
+\begin{itemize}
+\item \texttt{root} --- вычисляет корень уравнения $f(x)=g(x)$ на
+    заданном отрезке;
+\item \texttt{integral} --- вычисляет определенный интеграл функции на
+    заданном отрезке по формуле Симпсона;
+\item \texttt{find\_roots} --- находит три вершины фигуры;
+\item \texttt{find\_area} --- вычисляет площадь по найденным вершинам;
+\item \texttt{test\_root}, \texttt{test\_integral} --- выполняют
+    тестирование численных методов.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=17mm, every node/.style={draw, rounded corners, align=center}]
+\node (main) {main.c\\CLI и управление};
+\node (root) [below left of=main, xshift=-18mm] {root\\Ньютон/хорды};
+\node (integral) [below right of=main, xshift=18mm] {integral\\Симпсон};
+\node (asm) [below of=root, yshift=-5mm] {functions.asm\\$f_i$, $f_i'$};
+\node (area) [below of=integral, yshift=-5mm] {вычисление\\площади};
+\draw[->] (main) -- (root);
+\draw[->] (main) -- (integral);
+\draw[->] (root) -- (asm);
+\draw[->] (integral) -- (asm);
+\draw[->] (integral) -- (area);
+\end{tikzpicture}
+\caption{Структура программы}
+\label{structure}
+\end{figure}
+
+\newpage
+
+\section{Сборка программы (Make-файл)}
+
+Сборка выполняется утилитой \texttt{make}. Цель \texttt{all} собирает
+исполняемый файл \texttt{lab6}. Цель \texttt{chord} пересобирает
+программу с макросом \texttt{USE\_CHORD}, включая метод хорд вместо
+метода Ньютона. Цель \texttt{clean} удаляет объектные файлы и
+исполняемый файл.
+
+\begin{verbatim}
+CC = gcc
+ASM = nasm
+
+TARGET = lab6
+SRC_DIR = src
+BUILD_DIR = build
+
+CFLAGS = -m32 -Wall -Wextra -std=c99 -O2
+LDFLAGS = -m32
+LDLIBS = -lm
+
+METHOD ?= newton
+
+ifeq ($(METHOD),chord)
+    CFLAGS += -DUSE_CHORD
+endif
+\end{verbatim}
+
+Зависимости модулей:
+\[
+    \texttt{lab6} \leftarrow
+    \texttt{main.o}+\texttt{functions.o},
+\]
+\[
+    \texttt{main.o} \leftarrow \texttt{src/main.c},\qquad
+    \texttt{functions.o} \leftarrow \texttt{src/functions.asm}.
+\]
+
+\newpage
+
+\section{Отладка программы, тестирование функций}
+
+Для проверки функции \texttt{root} используется уравнение
+\[
+    f_2(x)=f_3(x).
+\]
+Оно сводится к квадратному уравнению
+\[
+    -2x+8=-\frac{5}{x},\qquad 2x^2-8x-5=0.
+\]
+Корень, лежащий на выбранном отрезке, равен
+\[
+    x=\frac{4-\sqrt{26}}{2}\approx -0.549509756796.
+\]
+Этот результат используется в режиме \texttt{--test-root}.
+
+Для проверки функции \texttt{integral} используется интеграл линейной
+функции:
+\[
+    \int_0^1(-2x+8)\,dx = 7.
+\]
+Этот результат используется в режиме \texttt{--test-integral}.
+Все тесты запускаются ключом \texttt{--test} или целью \texttt{make test}.
+
+\newpage
+
+\section{Программа на Си и на Ассемблере}
+
+Исходные тексты программы находятся в каталоге \texttt{src}. Основная
+логика численных методов реализована в файле \texttt{main.c}. Функции
+варианта и их производные реализованы в файле \texttt{functions.asm}.
+В ассемблерном модуле используются инструкции x87; результат каждой
+функции возвращается в регистре \texttt{st0}, что соответствует
+соглашению возврата вещественного значения в 32-разрядном режиме.
+
+Программа поддерживает следующие ключи командной строки:
+\begin{itemize}
+\item \texttt{--help} --- справка;
+\item \texttt{--roots} --- вывод точек пересечения;
+\item \texttt{--iterations} --- вывод числа итераций;
+\item \texttt{--test-root} --- тестирование функции \texttt{root};
+\item \texttt{--test-integral} --- тестирование функции \texttt{integral};
+\item \texttt{--test} --- запуск всех тестов.
+\end{itemize}
+
+\newpage
+
+\section{Анализ допущенных ошибок}
+
+Основные источники погрешности связаны с приближенным вычислением корней,
+численным интегрированием и округлением вещественных чисел. Для уменьшения
+влияния этих ошибок внутренние точности $\varepsilon_1$ и $\varepsilon_2$
+выбраны существенно меньше требуемой точности площади. При вычислении
+интегралов используется уточнение по правилу Рунге, а при поиске корней
+используются отрезки, на которых соответствующие разности функций
+непрерывны и меняют знак.
+
+\newpage
+\begin{raggedright}
+\addcontentsline{toc}{section}{Список цитируемой литературы}
+\begin{thebibliography}{99}
+\bibitem{math} Ильин~В.\,А., Садовничий~В.\,А., Сендов~Бл.\,Х. Математический анализ. Т.\,1~---
+    Москва: Наука, 1985.
+\end{thebibliography}
+\end{raggedright}
+
+\end{document}
